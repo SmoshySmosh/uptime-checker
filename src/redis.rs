@@ -161,6 +161,10 @@ pub fn build_redis_client(
     timeout_ms: u64,
     readonly: bool,
 ) -> Result<RedisClient> {
+    rustls::crypto::ring::default_provider()
+        .install_default()
+        .expect("Failed to install default CryptoProvider");
+
     let client = if enable_cluster {
         ClientKind::Cluster(ClusterClient::builder(vec![redis_url.to_string()]).build()?)
     } else {
@@ -220,5 +224,28 @@ impl RedisClient {
 
     pub fn is_readonly(&self) -> bool {
         self.readonly
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::build_redis_client;
+    use std::time::Duration;
+
+    #[tokio::test]
+    async fn test_tls_redis_client_accepts_rediss_urls() {
+        let client = build_redis_client("rediss://127.0.0.1:6379", false, 100, false).unwrap();
+
+        assert!(!client.is_readonly());
+    }
+
+    #[tokio::test]
+    async fn test_tls_redis_connection_attempt_returns_error_without_panicking() {
+        let client = build_redis_client("rediss://127.0.0.1:1", false, 100, false).unwrap();
+
+        let result = tokio::time::timeout(Duration::from_secs(1), client.get_async_connection()).await;
+
+        assert!(result.is_ok(), "connection attempt should complete");
+        assert!(result.unwrap().is_err(), "connection should fail for an unreachable TLS endpoint");
     }
 }
