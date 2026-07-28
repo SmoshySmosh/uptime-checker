@@ -49,6 +49,13 @@ mod test {
     use crate::app::config::Config;
     use redis::Client;
 
+    #[ctor::ctor]
+    fn init_crypto() {
+        rustls::crypto::ring::default_provider()
+            .install_default()
+            .expect("Failed to install default CryptoProvider");
+    }
+
     #[ctor::dtor]
     fn cleanup() {
         // Flushes Redis back to the default state to avoid state crossover between runs.
